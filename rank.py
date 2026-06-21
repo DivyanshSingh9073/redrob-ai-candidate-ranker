@@ -172,6 +172,11 @@ CONSULTING_COMPANIES = [
     "cognizant",
     "capgemini",
     "accenture",
+    "hcl",
+"tech mahindra",
+"deloitte",
+"ibm",
+"ltimindtree",
 ]
 
 CORE_LOCATIONS = ["pune", "noida"]

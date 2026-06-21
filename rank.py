@@ -10,12 +10,12 @@ Usage:
     python rank.py --input candidates.jsonl --output submission.csv --debug debug.csv
 """
 
-import json
-import re
+import argparse
 import csv
+import json
 import math
 import random
-import argparse
+import re
 import time
 from datetime import datetime
 
@@ -44,17 +44,16 @@ marketplace products, distributed systems, open source contributions.
 REQUIRED_SKILLS = [
     "python",
     "rag",
-"llm",
-"transformers",
-"vector database",
-"chromadb",
-"langchain",
-"llamaindex",
-"hnsw",
-"reranking",
-"cross encoder"
+    "llm",
+    "transformers",
+    "vector database",
+    "chromadb",
+    "langchain",
+    "llamaindex",
+    "hnsw",
+    "reranking",
+    "cross encoder",
 ]
-
 
 EVAL_SKILLS = [
     "ndcg",
@@ -101,6 +100,8 @@ PRODUCTION_SIGNAL_TERMS = [
 
 NEGATIVE_TITLE_TERMS = [
     "marketing manager",
+    "digital marketing",
+    "seo specialist",
     "hr manager",
     "human resources",
     "graphic designer",
@@ -111,6 +112,13 @@ NEGATIVE_TITLE_TERMS = [
     "recruiter",
     "sales executive",
     "office admin",
+    "customer support",
+    "customer success",
+    "business analyst",
+    "ui designer",
+    "ux designer",
+    "sales manager",
+    "finance manager",
 ]
 
 # Updated ML signal terms (improved recall for modern GenAI + Retrieval stacks)
@@ -165,15 +173,26 @@ POSITIVE_TITLE_TERMS = [
     "ai engineer",
     "ml engineer",
     "machine learning engineer",
+    "senior ml engineer",
+    "senior ai engineer",
     "applied scientist",
-    "data scientist",
+    "research scientist",
     "research engineer",
-    "founding engineer",
-    "search engineer",
+    "data scientist",
     "nlp engineer",
-    "recommendation",
+    "llm engineer",
+    "genai engineer",
+    "gen ai engineer",
+    "search engineer",
+    "retrieval engineer",
     "ranking engineer",
+    "recommendation engineer",
+    "backend engineer",
+    "software engineer",
     "senior software engineer",
+    "staff engineer",
+    "founding engineer",
+    "platform engineer",
 ]
 
 EXPERT_LEVEL_TERMS = ["expert", "advanced", "proficient", "specialist"]
@@ -185,8 +204,7 @@ CURRENT_YEAR = datetime.now().year
 # ---------------------------------------------------------------------------
 
 def g(d, *keys, default=None):
-    """Safely fetch the first present key from a dict, case-insensitive,
-    trying several common spellings."""
+    """Safely fetch the first present key from a dict, case-insensitive."""
     if not isinstance(d, dict):
         return default
     for k in keys:
@@ -248,6 +266,7 @@ def safe_float(val, default=0.0):
 
 def clamp(x, lo=0.0, hi=1.0):
     return max(lo, min(hi, x))
+
 
 # ---------------------------------------------------------------------------
 # 3. FEATURE EXTRACTION
@@ -390,7 +409,9 @@ def compute_redrob_features(redrob_signals):
         return 0.5, False
 
     open_to_work = bool(g(redrob_signals, "open_to_work", default=False))
-    response_rate = safe_float(g(redrob_signals, "recruiter_response_rate", "response_rate", default=None), default=None)
+    response_rate = safe_float(
+        g(redrob_signals, "recruiter_response_rate", "response_rate", default=None), default=None
+    )
     activity = g(redrob_signals, "recruiter_activity", "last_active", "activity_score")
 
     components = [1.0 if open_to_work else 0.4]
@@ -414,11 +435,21 @@ def compute_redrob_features(redrob_signals):
     score = sum(components) / len(components)
     return score, open_to_work
 
+
 # ---------------------------------------------------------------------------
 # 4. HONEYPOT DETECTION
 # ---------------------------------------------------------------------------
 
-def detect_honeypot(candidate, profile, career_history, education, exp_years, stated_exp, derived_exp, skill_text):
+def detect_honeypot(
+    candidate,
+    profile,
+    career_history,
+    education,
+    exp_years,
+    stated_exp,
+    derived_exp,
+    skill_text,
+):
     """Returns (honeypot_score 0-1, list_of_flag_names)."""
     flags = []
     spans = get_career_spans(career_history)
@@ -451,6 +482,7 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
                 gy = parse_year(g(ed, "end_date", "end_year", "graduation_year", "to"))
                 if gy:
                     grad_years.append(gy)
+
     if grad_years:
         earliest_grad = min(grad_years)
         years_since_grad = CURRENT_YEAR - earliest_grad
@@ -481,12 +513,13 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
     score = min(1.0, 0.3 * len(flags))
     return score, flags
 
+
 # ---------------------------------------------------------------------------
 # 5. SEMANTIC SIMILARITY (offline, no model download)
 # ---------------------------------------------------------------------------
 
 _VECTORIZER = HashingVectorizer(
-    n_features=2 ** 16,
+    n_features=2**16,
     alternate_sign=False,
     ngram_range=(1, 2),
     norm="l2",
@@ -495,6 +528,7 @@ _VECTORIZER = HashingVectorizer(
 
 def build_jd_vector():
     return _VECTORIZER.transform([JD_TEXT.lower()])
+
 
 # ---------------------------------------------------------------------------
 # 6. SCORING WEIGHTS
@@ -520,7 +554,8 @@ def experience_fit_score(exp_years):
     if 5 <= exp_years <= 9:
         return 0.75
     sigma = 3.0
-    return clamp(math.exp(-((exp_years - 7) ** 2) / (2 * sigma ** 2)) * 0.7)
+    return clamp(math.exp(-((exp_years - 7) ** 2) / (2 * sigma**2)) * 0.7)
+
 
 # ---------------------------------------------------------------------------
 # 7. REASONING GENERATION
@@ -569,7 +604,6 @@ def generate_reasoning(rec):
     skills_text = ", ".join(skills_for_text)
 
     opener = rnd.choice(OPENERS).format(exp=rec["exp_years"], pron=pron, Pron=Pron, skills=skills_text)
-
     sentences = [opener]
 
     if rec["current_title"] and rec["current_company"]:
@@ -591,6 +625,7 @@ def generate_reasoning(rec):
             sentences.append(rnd.choice(CONCERN_CLAUSES))
 
     return " ".join(sentences[:2])
+
 
 # ---------------------------------------------------------------------------
 # 8. SCORING + PIPELINE
@@ -615,7 +650,6 @@ def composite_score(rec):
         score *= 0.25
 
     score *= (1 - 0.6 * rec["honeypot_score"])
-
     return clamp(score, 0.0, 1.0)
 
 
@@ -728,7 +762,6 @@ def main():
     print(f"Loaded {len(records)} candidates in {time.time() - t0:.1f}s")
 
     if not records:
-        # Still write a valid CSV (empty rows)
         with open(args.output, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["candidate_id", "rank", "score", "reasoning"])
@@ -752,6 +785,7 @@ def main():
         if prev_score is not None and score >= prev_score:
             score = prev_score - 1e-4
         prev_score = score
+
         rec["score"] = max(score, 0.0)
         rec["rank"] = i
         rec["reasoning"] = generate_reasoning(rec)

@@ -117,6 +117,14 @@ PRODUCTION_SIGNAL_TERMS = [
     "throughput",
     "in prod",
     "rolled out",
+    "served",
+    "microservice",
+    "docker",
+    "kubernetes",
+    "api",
+    "real time",
+    "monitoring",
+    "airflow"
 ]
 
 NEGATIVE_TITLE_TERMS = [

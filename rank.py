@@ -57,29 +57,38 @@ REQUIRED_SKILLS = [
 
 EVAL_SKILLS = [
     "ndcg",
-    "map@",
+    "map",
     "mean average precision",
     "mrr",
     "a/b test",
-    "ab test",
     "offline evaluation",
+    "online evaluation",
+    "ab testing",
+    "precision",
+    "recall",
+    "f1 score",
+    "auc",
+    "benchmark",
+    "evaluation framework",
 ]
 
+
 PREFERRED_SKILLS = [
-    "Python",
+    "python",
     "lightgbm",
-"catboost",
-"xgb ranker",
-"lambda mart",
-"ltr",
-"reranker",
-"cross encoder",
-"rag evaluation",
-"prompt engineering",
-"langgraph",
-"agentic ai",
-"github"
+    "catboost",
+    "xgb ranker",
+    "lambda mart",
+    "ltr",
+    "reranker",
+    "cross encoder",
+    "rag evaluation",
+    "prompt engineering",
+    "langgraph",
+    "agentic ai",
+    "github",
 ]
+
 
 PRODUCTION_SIGNAL_TERMS = [
     "production",
@@ -100,9 +109,8 @@ PRODUCTION_SIGNAL_TERMS = [
     "api",
     "real time",
     "monitoring",
-    "airflow"
+    "airflow",
 ]
-
 
 NEGATIVE_TITLE_TERMS = [
     "marketing manager",
@@ -125,6 +133,16 @@ NEGATIVE_TITLE_TERMS = [
     "ux designer",
     "sales manager",
     "finance manager",
+]
+
+# Strong negative title terms (extra penalty in addition to NEGATIVE_TITLE_TERMS)
+VERY_NEGATIVE_TITLE_TERMS = [
+    "marketing manager",
+    "graphic designer",
+    "content writer",
+    "accountant",
+    "sales executive",
+    "hr manager",
 ]
 
 # Updated ML signal terms (improved recall for modern GenAI + Retrieval stacks)
@@ -203,11 +221,27 @@ POSITIVE_TITLE_TERMS = [
 
 EXPERT_LEVEL_TERMS = ["expert", "advanced", "proficient", "specialist"]
 
+DESCRIPTION_SIGNAL_TERMS = [
+    "recommendation system",
+    "ranking system",
+    "retrieval",
+    "search engine",
+    "embedding",
+    "vector database",
+    "semantic search",
+    "llm",
+    "rag",
+    "fine tuning",
+    "cross encoder",
+]
+
+
 CURRENT_YEAR = datetime.now().year
 
 # ---------------------------------------------------------------------------
 # 2. GENERIC HELPERS
 # ---------------------------------------------------------------------------
+
 
 def g(d, *keys, default=None):
     """Safely fetch the first present key from a dict, case-insensitive."""
@@ -277,6 +311,7 @@ def clamp(x, lo=0.0, hi=1.0):
 # ---------------------------------------------------------------------------
 # 3. FEATURE EXTRACTION
 # ---------------------------------------------------------------------------
+
 
 def get_career_spans(career_history):
     """Return list of (start_year, end_year, title, company) tuples."""
@@ -356,10 +391,13 @@ def compute_title_features(profile, career_history):
         current_title = spans[-1][2]
 
     negative_hit = any(t in current_title for t in NEGATIVE_TITLE_TERMS)
+    very_negative_hit = any(t in current_title for t in VERY_NEGATIVE_TITLE_TERMS)
     positive_hit = any(t in current_title for t in POSITIVE_TITLE_TERMS)
     ml_signal = any(t in current_title for t in ML_SIGNAL_TERMS)
 
-    if positive_hit:
+    if very_negative_hit:
+        title_score = -0.5
+    elif positive_hit:
         title_score = 1.0
     elif ml_signal:
         title_score = 0.6
@@ -387,7 +425,7 @@ def compute_company_features(profile, career_history):
     has_consulting = consulting_hits > 0
 
     if is_consulting_only:
-        company_score = 0.2
+        company_score = 0.1
     elif has_consulting:
         company_score = 0.7
     else:
@@ -442,9 +480,27 @@ def compute_redrob_features(redrob_signals):
     return score, open_to_work
 
 
+def compute_desc_score(career_history, cap=6):
+    if not isinstance(career_history, list):
+        return 0.0, []
+
+    desc_texts = []
+    for role in career_history:
+        if isinstance(role, dict):
+            desc_texts.append(to_text(g(role, "description", "summary", "responsibilities")))
+
+    text = " ".join(d for d in desc_texts if d)
+    if not text:
+        return 0.0, []
+
+    score, matched = keyword_score(text, DESCRIPTION_SIGNAL_TERMS, cap=cap)
+    return score, matched
+
+
 # ---------------------------------------------------------------------------
 # 4. HONEYPOT DETECTION
 # ---------------------------------------------------------------------------
+
 
 def detect_honeypot(
     candidate,
@@ -508,9 +564,8 @@ def detect_honeypot(
     rs = candidate.get("redrob_signals") or {}
     founded_year = parse_year(g(rs, "current_company_founded_year", "company_founded_year"))
     if founded_year and spans:
-        last_start = spans[-1][0]
         tenure = spans[-1][1] - spans[-1][0]
-        if last_start < founded_year and tenure >= 2:
+        if spans[-1][0] < founded_year and tenure >= 2:
             flags.append("company_age_mismatch")
 
     if exp_years > 25 and not spans and not grad_years:
@@ -541,16 +596,18 @@ def build_jd_vector():
 # ---------------------------------------------------------------------------
 
 WEIGHTS = {
-    "semantic_sim": 0.22,
-    "required_skill": 0.18,
+    "semantic_sim": 0.25,
+    "required_skill": 0.20,
     "eval_skill": 0.08,
     "preferred_skill": 0.07,
-    "production_signal": 0.07,
-    "experience_fit": 0.16,
-    "title_score": 0.09,
-    "company_score": 0.05,
-    "location_score": 0.04,
-    "redrob_score": 0.04,
+    "production_signal": 0.08,
+    "experience_fit": 0.15,
+    "title_score": 0.10,
+    "company_score": 0.03,
+    "location_score": 0.02,
+    "redrob_score": 0.02,
+    # description_signal: keep impact small but meaningful
+    "description_signal": 0.02,
 }
 
 
@@ -650,11 +707,14 @@ def composite_score(rec):
         + WEIGHTS["company_score"] * rec["company_score"]
         + WEIGHTS["location_score"] * rec["location_score"]
         + WEIGHTS["redrob_score"] * rec["redrob_score"]
+        + WEIGHTS["description_signal"] * rec["desc_score"]
     )
 
+    # harsh penalty for strongly negative titles when other signals are weak
     if rec["neg_title"] and rec["prod_score"] < 0.5 and rec["req_score"] < 0.25:
         score *= 0.25
 
+    # honeypot soft penalty
     score *= (1 - 0.6 * rec["honeypot_score"])
     return clamp(score, 0.0, 1.0)
 
@@ -693,6 +753,8 @@ def process_file(input_path):
             redrob_score, open_to_work = compute_redrob_features(redrob_signals)
             exp_fit = experience_fit_score(exp_years)
 
+            desc_score, _ = compute_desc_score(career_history, cap=6)
+
             honeypot_score, honeypot_flags = detect_honeypot(
                 candidate,
                 profile,
@@ -721,6 +783,7 @@ def process_file(input_path):
                     "redrob_score": redrob_score,
                     "open_to_work": open_to_work,
                     "exp_fit": exp_fit,
+                    "desc_score": desc_score,
                     "honeypot_score": honeypot_score,
                     "honeypot_flags": honeypot_flags,
                     "current_title": current_title,
@@ -818,6 +881,7 @@ def main():
             "company_score",
             "location_score",
             "redrob_score",
+            "desc_score",
             "exp_fit",
             "honeypot_score",
             "honeypot_flags",

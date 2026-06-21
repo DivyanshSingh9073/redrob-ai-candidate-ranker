@@ -42,17 +42,16 @@ marketplace products, distributed systems, open source contributions.
 
 # Core required skills (expanded to cover modern RAG / LLM tooling)
 REQUIRED_SKILLS = [
-    "python",
-    "rag",
-    "llm",
-    "transformers",
-    "vector database",
-    "chromadb",
-    "langchain",
-    "llamaindex",
-    "hnsw",
     "reranking",
-    "cross encoder",
+"cross encoder",
+"rag",
+"langchain",
+"llamaindex",
+"vector search",
+"hnsw",
+"hybrid search",
+"chromadb",
+"sentence transformers"
 ]
 
 EVAL_SKILLS = [

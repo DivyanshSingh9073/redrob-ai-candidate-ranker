@@ -42,16 +42,38 @@ marketplace products, distributed systems, open source contributions.
 
 # Core required skills (expanded to cover modern RAG / LLM tooling)
 REQUIRED_SKILLS = [
+    "python",
+    "embedding",
+    "embeddings",
+    "retrieval",
+    "ranking",
+    "recommendation",
+    "vector search",
+    "hybrid search",
+
+    "sentence transformer",
+    "sentence transformers",
+    "openai embedding",
+
+    "bge",
+    "e5",
+    "pinecone",
+    "weaviate",
+    "qdrant",
+    "milvus",
+    "opensearch",
+    "elasticsearch",
+    "faiss",
+
+    "rag",
+    "llm",
+    "transformers",
+    "langchain",
+    "llamaindex",
+    "chromadb",
+    "hnsw",
     "reranking",
-"cross encoder",
-"rag",
-"langchain",
-"llamaindex",
-"vector search",
-"hnsw",
-"hybrid search",
-"chromadb",
-"sentence transformers"
+    "cross encoder"
 ]
 
 EVAL_SKILLS = [

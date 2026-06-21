@@ -93,16 +93,31 @@ PREFERRED_SKILLS = [
     "fine-tun",
     "finetun",
     "fine tun",
+
     "learning to rank",
     "learning-to-rank",
     "ltr",
+    "lambda mart",
+    "xgb ranker",
     "xgboost",
+    "lightgbm",
+    "catboost",
+
+    "rag evaluation",
+    "cross encoder",
+    "reranker",
+    "prompt engineering",
+    "langgraph",
+    "agentic ai",
+
     "hrtech",
     "marketplace",
     "distributed system",
+
     "open source",
     "open-source",
-    "github.com",
+    "github",
+    "github.com"
 ]
 
 PRODUCTION_SIGNAL_TERMS = [

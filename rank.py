@@ -66,22 +66,19 @@ EVAL_SKILLS = [
 ]
 
 PREFERRED_SKILLS = [
-    "lora",
-    "qlora",
-    "peft",
-    "fine-tun",
-    "finetun",
-    "fine tun",
-    "learning to rank",
-    "learning-to-rank",
-    "ltr",
-    "xgboost",
-    "hrtech",
-    "marketplace",
-    "distributed system",
-    "open source",
-    "open-source",
-    "github.com",
+    "Python",
+    "lightgbm",
+"catboost",
+"xgb ranker",
+"lambda mart",
+"ltr",
+"reranker",
+"cross encoder",
+"rag evaluation",
+"prompt engineering",
+"langgraph",
+"agentic ai",
+"github"
 ]
 
 PRODUCTION_SIGNAL_TERMS = [
@@ -96,7 +93,16 @@ PRODUCTION_SIGNAL_TERMS = [
     "throughput",
     "in prod",
     "rolled out",
+    "served",
+    "microservice",
+    "docker",
+    "kubernetes",
+    "api",
+    "real time",
+    "monitoring",
+    "airflow"
 ]
+
 
 NEGATIVE_TITLE_TERMS = [
     "marketing manager",

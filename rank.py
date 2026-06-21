@@ -67,9 +67,26 @@ PRODUCTION_SIGNAL_TERMS = [
 ]
 
 NEGATIVE_TITLE_TERMS = [
-    "marketing manager", "hr manager", "human resources",
-    "graphic designer", "accountant", "content writer", "copywriter",
-    "talent acquisition", "recruiter", "sales executive", "office admin",
+    "marketing manager",
+    "digital marketing",
+    "seo specialist",
+    "hr manager",
+    "human resources",
+    "graphic designer",
+    "accountant",
+    "content writer",
+    "copywriter",
+    "talent acquisition",
+    "recruiter",
+    "sales executive",
+    "office admin",
+    "customer support",
+    "customer success",
+    "business analyst",
+    "ui designer",
+    "ux designer",
+    "sales manager",
+    "finance manager"
 ]
 
 ML_SIGNAL_TERMS = [
@@ -90,10 +107,29 @@ TIER1_CITIES = [
 ]
 
 POSITIVE_TITLE_TERMS = [
-    "ai engineer", "ml engineer", "machine learning engineer",
-    "applied scientist", "data scientist", "research engineer",
-    "founding engineer", "search engineer", "nlp engineer",
-    "recommendation", "ranking engineer", "senior software engineer",
+    "ai engineer",
+    "machine learning engineer",
+    "ml engineer",
+    "senior ml engineer",
+    "senior ai engineer",
+    "applied scientist",
+    "research scientist",
+    "research engineer",
+    "data scientist",
+    "nlp engineer",
+    "llm engineer",
+    "genai engineer",
+    "gen ai engineer",
+    "search engineer",
+    "retrieval engineer",
+    "ranking engineer",
+    "recommendation engineer",
+    "backend engineer",
+    "software engineer",
+    "senior software engineer",
+    "staff engineer",
+    "founding engineer",
+    "platform engineer"
 ]
 
 EXPERT_LEVEL_TERMS = ["expert", "advanced", "proficient", "specialist"]

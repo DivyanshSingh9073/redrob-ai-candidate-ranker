@@ -10,18 +10,17 @@ Usage:
     python rank.py --input candidates.jsonl --output submission.csv --debug debug.csv
 """
 
-import json
-import re
+import argparse
 import csv
+import json
 import math
 import random
-import argparse
+import re
 import time
-from datetime import datetime, date
+from datetime import datetime
 
 import numpy as np
 from sklearn.feature_extraction.text import HashingVectorizer
-from scipy.sparse import vstack
 
 # ---------------------------------------------------------------------------
 # 1. JOB DESCRIPTION CONFIG
@@ -41,29 +40,62 @@ fine-tuning, lora, qlora, peft, learning to rank, xgboost, hrtech,
 marketplace products, distributed systems, open source contributions.
 """
 
+# Core required skills (expanded to cover modern RAG / LLM tooling)
 REQUIRED_SKILLS = [
-    "embedding", "embeddings", "retrieval", "ranking", "recommendation",
-    "recommender", "vector search", "hybrid search", "python",
-    "sentence transformer", "sentence-transformer", "openai embedding",
-    "bge", "e5 ", "pinecone", "weaviate", "qdrant", "milvus",
-    "opensearch", "elasticsearch", "faiss",
+    "python",
+    "rag",
+    "llm",
+    "transformers",
+    "vector database",
+    "chromadb",
+    "langchain",
+    "llamaindex",
+    "hnsw",
+    "reranking",
+    "cross encoder",
 ]
 
 EVAL_SKILLS = [
-    "ndcg", "map@", "mean average precision", "mrr",
-    "a/b test", "ab test", "offline evaluation",
+    "ndcg",
+    "map@",
+    "mean average precision",
+    "mrr",
+    "a/b test",
+    "ab test",
+    "offline evaluation",
 ]
 
 PREFERRED_SKILLS = [
-    "lora", "qlora", "peft", "fine-tun", "finetun", "fine tun",
-    "learning to rank", "learning-to-rank", "ltr", "xgboost", "hrtech",
-    "marketplace", "distributed system", "open source", "open-source",
+    "lora",
+    "qlora",
+    "peft",
+    "fine-tun",
+    "finetun",
+    "fine tun",
+    "learning to rank",
+    "learning-to-rank",
+    "ltr",
+    "xgboost",
+    "hrtech",
+    "marketplace",
+    "distributed system",
+    "open source",
+    "open-source",
     "github.com",
 ]
 
 PRODUCTION_SIGNAL_TERMS = [
-    "production", "deployed", "shipped", "scale", "scaled", "live",
-    "users", "latency", "throughput", "in prod", "rolled out",
+    "production",
+    "deployed",
+    "shipped",
+    "scale",
+    "scaled",
+    "live",
+    "users",
+    "latency",
+    "throughput",
+    "in prod",
+    "rolled out",
 ]
 
 NEGATIVE_TITLE_TERMS = [
@@ -86,30 +118,61 @@ NEGATIVE_TITLE_TERMS = [
     "ui designer",
     "ux designer",
     "sales manager",
-    "finance manager"
+    "finance manager",
 ]
 
+# Updated ML signal terms (improved recall for modern GenAI + Retrieval stacks)
 ML_SIGNAL_TERMS = [
-    "machine learning", "ml engineer", "ai engineer", "data scientist",
-    "deep learning", "nlp", "search", "ranking", "retrieval",
-    "recommendation", "applied scientist", "research engineer",
+    "machine learning",
+    "ml engineer",
+    "ai engineer",
+    "data scientist",
+    "deep learning",
+    "nlp",
+    "llm",
+    "transformer",
+    "retrieval",
+    "search",
+    "ranking",
+    "recommendation",
+    "rag",
+    "vector database",
+    "embedding",
+    "applied scientist",
+    "research engineer",
+    "genai",
 ]
 
 CONSULTING_COMPANIES = [
-    "tcs", "tata consultancy", "infosys", "wipro", "cognizant",
-    "capgemini", "accenture",
+    "tcs",
+    "tata consultancy",
+    "infosys",
+    "wipro",
+    "cognizant",
+    "capgemini",
+    "accenture",
 ]
 
 CORE_LOCATIONS = ["pune", "noida"]
 TIER1_CITIES = [
-    "pune", "noida", "bangalore", "bengaluru", "delhi", "new delhi",
-    "mumbai", "hyderabad", "chennai", "gurgaon", "gurugram", "ncr",
+    "pune",
+    "noida",
+    "bangalore",
+    "bengaluru",
+    "delhi",
+    "new delhi",
+    "mumbai",
+    "hyderabad",
+    "chennai",
+    "gurgaon",
+    "gurugram",
+    "ncr",
 ]
 
 POSITIVE_TITLE_TERMS = [
     "ai engineer",
-    "machine learning engineer",
     "ml engineer",
+    "machine learning engineer",
     "senior ml engineer",
     "senior ai engineer",
     "applied scientist",
@@ -129,7 +192,7 @@ POSITIVE_TITLE_TERMS = [
     "senior software engineer",
     "staff engineer",
     "founding engineer",
-    "platform engineer"
+    "platform engineer",
 ]
 
 EXPERT_LEVEL_TERMS = ["expert", "advanced", "proficient", "specialist"]
@@ -141,8 +204,7 @@ CURRENT_YEAR = datetime.now().year
 # ---------------------------------------------------------------------------
 
 def g(d, *keys, default=None):
-    """Safely fetch the first present key from a dict, case-insensitive,
-    trying several common spellings."""
+    """Safely fetch the first present key from a dict, case-insensitive."""
     if not isinstance(d, dict):
         return default
     for k in keys:
@@ -165,11 +227,12 @@ def to_text(val):
     if isinstance(val, list):
         return " ".join(to_text(v) for v in val)
     if isinstance(val, dict):
-        return " ".join(to_text(v) for v in d.values()) if (d := val) else ""
+        return " ".join(to_text(v) for v in val.values()) if val else ""
     return str(val).lower()
 
 
 _DATE_RE = re.compile(r"(\d{4})")
+
 
 def parse_year(val):
     """Best-effort extraction of a 4-digit year from messy date fields."""
@@ -230,15 +293,7 @@ def get_career_spans(career_history):
 
 
 def compute_experience_years(profile, career_history):
-    """Returns (exp_years, stated_exp, derived_exp).
-
-    exp_years: best estimate to use for scoring (prefers explicit profile
-        field, falls back to career-history span).
-    stated_exp: explicit "years of experience" claimed in the profile, or
-        None if not present.
-    derived_exp: years derived purely from the union of career-history
-        spans (earliest start -> latest end), or 0.0 if no history.
-    """
+    """Returns (exp_years, stated_exp, derived_exp)."""
     stated_exp = None
     raw = g(profile, "experience", "total_experience", "years_of_experience")
     if raw is not None:
@@ -321,9 +376,7 @@ def compute_company_features(profile, career_history):
             if c:
                 companies.add(c)
 
-    consulting_hits = sum(
-        1 for c in companies if any(cc in c for cc in CONSULTING_COMPANIES)
-    )
+    consulting_hits = sum(1 for c in companies if any(cc in c for cc in CONSULTING_COMPANIES))
     is_consulting_only = len(companies) > 0 and consulting_hits == len(companies)
     has_consulting = consulting_hits > 0
 
@@ -339,8 +392,7 @@ def compute_company_features(profile, career_history):
 
 def compute_location_features(profile, redrob_signals):
     loc = to_text(g(profile, "location", "city", "current_location"))
-    open_to_reloc = bool(g(redrob_signals, "open_to_relocate", "open_to_relocation",
-                            default=False))
+    open_to_reloc = bool(g(redrob_signals, "open_to_relocate", "open_to_relocation", default=False))
 
     if any(c in loc for c in CORE_LOCATIONS):
         score = 1.0
@@ -358,13 +410,11 @@ def compute_redrob_features(redrob_signals):
 
     open_to_work = bool(g(redrob_signals, "open_to_work", default=False))
     response_rate = safe_float(
-        g(redrob_signals, "recruiter_response_rate", "response_rate", default=None),
-        default=None,
+        g(redrob_signals, "recruiter_response_rate", "response_rate", default=None), default=None
     )
     activity = g(redrob_signals, "recruiter_activity", "last_active", "activity_score")
 
-    components = []
-    components.append(1.0 if open_to_work else 0.4)
+    components = [1.0 if open_to_work else 0.4]
 
     if response_rate is not None:
         rr = response_rate / 100.0 if response_rate > 1 else response_rate
@@ -390,26 +440,29 @@ def compute_redrob_features(redrob_signals):
 # 4. HONEYPOT DETECTION
 # ---------------------------------------------------------------------------
 
-def detect_honeypot(candidate, profile, career_history, education, exp_years, stated_exp, derived_exp, skill_text):
+def detect_honeypot(
+    candidate,
+    profile,
+    career_history,
+    education,
+    exp_years,
+    stated_exp,
+    derived_exp,
+    skill_text,
+):
     """Returns (honeypot_score 0-1, list_of_flag_names)."""
     flags = []
     spans = get_career_spans(career_history)
 
-    # Flag 0: Stated total experience is far larger than what the career
-    # history can actually support (e.g. "8 years experience" but the
-    # listed roles only span 1 year / start at companies founded recently).
     if stated_exp is not None and spans:
         if stated_exp - derived_exp >= 4:
             flags.append("stated_vs_derived_experience_mismatch")
 
-    # Flag 1: Many "expert"-level skills claimed with almost no experience.
     expert_mentions = sum(1 for t in EXPERT_LEVEL_TERMS if t in skill_text)
     n_skills = len(candidate.get("skills") or [])
     if exp_years < 1.5 and (expert_mentions >= 2 or n_skills >= 8):
         flags.append("expert_skills_no_experience")
 
-    # Flag 2: Overlapping / inconsistent career history (end before start,
-    # or large total overlap between non-adjacent roles).
     bad_order = any(end < start for start, end, _, _ in spans)
     overlap_years = 0
     for i in range(len(spans)):
@@ -422,8 +475,6 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
     if bad_order or overlap_years >= 3:
         flags.append("career_history_inconsistent")
 
-    # Flag 3: Claims more total experience than years since first
-    # graduation/education end date.
     grad_years = []
     if isinstance(education, list):
         for ed in education:
@@ -431,14 +482,13 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
                 gy = parse_year(g(ed, "end_date", "end_year", "graduation_year", "to"))
                 if gy:
                     grad_years.append(gy)
+
     if grad_years:
         earliest_grad = min(grad_years)
         years_since_grad = CURRENT_YEAR - earliest_grad
         if exp_years > years_since_grad + 1.5 and years_since_grad >= 0:
             flags.append("experience_exceeds_education_timeline")
 
-    # Flag 4: Implausible title jump (junior/intern -> VP/Director/Head/Chief
-    # within 2 years of career start).
     if spans:
         first_title = spans[0][2]
         first_start = spans[0][0]
@@ -449,9 +499,6 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
                 flags.append("implausible_title_jump")
                 break
 
-    # Flag 5: Career span implies founding-stage tenure at a company that
-    # (per redrob signals) was founded very recently, but candidate claims
-    # many years at it.
     rs = candidate.get("redrob_signals") or {}
     founded_year = parse_year(g(rs, "current_company_founded_year", "company_founded_year"))
     if founded_year and spans:
@@ -460,8 +507,6 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
         if last_start < founded_year and tenure >= 2:
             flags.append("company_age_mismatch")
 
-    # Flag 6: Unrealistically long total experience for a non-existent
-    # education / career trail (catch-all sanity check).
     if exp_years > 25 and not spans and not grad_years:
         flags.append("unverifiable_long_experience")
 
@@ -474,7 +519,7 @@ def detect_honeypot(candidate, profile, career_history, education, exp_years, st
 # ---------------------------------------------------------------------------
 
 _VECTORIZER = HashingVectorizer(
-    n_features=2 ** 16,
+    n_features=2**16,
     alternate_sign=False,
     ngram_range=(1, 2),
     norm="l2",
@@ -508,9 +553,8 @@ def experience_fit_score(exp_years):
         return 1.0
     if 5 <= exp_years <= 9:
         return 0.75
-    # Gaussian falloff outside the acceptable band, centered at 7
     sigma = 3.0
-    return clamp(math.exp(-((exp_years - 7) ** 2) / (2 * sigma ** 2)) * 0.7)
+    return clamp(math.exp(-((exp_years - 7) ** 2) / (2 * sigma**2)) * 0.7)
 
 
 # ---------------------------------------------------------------------------
@@ -559,10 +603,7 @@ def generate_reasoning(rec):
     skills_for_text = rec["matched_required"][:3] or rec["matched_preferred"][:3] or ["python", "ml systems"]
     skills_text = ", ".join(skills_for_text)
 
-    opener = rnd.choice(OPENERS).format(
-        exp=rec["exp_years"], pron=pron, Pron=Pron, skills=skills_text
-    )
-
+    opener = rnd.choice(OPENERS).format(exp=rec["exp_years"], pron=pron, Pron=Pron, skills=skills_text)
     sentences = [opener]
 
     if rec["current_title"] and rec["current_company"]:
@@ -573,15 +614,12 @@ def generate_reasoning(rec):
             )
         )
     elif rec["matched_eval"]:
-        sentences.append(
-            rnd.choice(EVAL_CLAUSES).format(evals=", ".join(rec["matched_eval"][:3]))
-        )
+        sentences.append(rnd.choice(EVAL_CLAUSES).format(evals=", ".join(rec["matched_eval"][:3])))
     elif rec["location"]:
         sentences.append(rnd.choice(LOCATION_CLAUSES).format(loc=rec["location"].title()))
     else:
         sentences.append(rnd.choice(GENERIC_CLAUSES))
 
-    # Add a mild caveat if relevant, keeping total to 2 sentences max
     if rec["is_consulting_only"] or not (5 <= rec["exp_years"] <= 9):
         if len(sentences) < 2:
             sentences.append(rnd.choice(CONCERN_CLAUSES))
@@ -590,8 +628,30 @@ def generate_reasoning(rec):
 
 
 # ---------------------------------------------------------------------------
-# 8. MAIN PIPELINE
+# 8. SCORING + PIPELINE
 # ---------------------------------------------------------------------------
+
+
+def composite_score(rec):
+    score = (
+        WEIGHTS["semantic_sim"] * rec["semantic_sim"]
+        + WEIGHTS["required_skill"] * rec["req_score"]
+        + WEIGHTS["eval_skill"] * rec["eval_score"]
+        + WEIGHTS["preferred_skill"] * rec["pref_score"]
+        + WEIGHTS["production_signal"] * rec["prod_score"]
+        + WEIGHTS["experience_fit"] * rec["exp_fit"]
+        + WEIGHTS["title_score"] * rec["title_score"]
+        + WEIGHTS["company_score"] * rec["company_score"]
+        + WEIGHTS["location_score"] * rec["location_score"]
+        + WEIGHTS["redrob_score"] * rec["redrob_score"]
+    )
+
+    if rec["neg_title"] and rec["prod_score"] < 0.5 and rec["req_score"] < 0.25:
+        score *= 0.25
+
+    score *= (1 - 0.6 * rec["honeypot_score"])
+    return clamp(score, 0.0, 1.0)
+
 
 def process_file(input_path):
     records = []
@@ -628,34 +688,42 @@ def process_file(input_path):
             exp_fit = experience_fit_score(exp_years)
 
             honeypot_score, honeypot_flags = detect_honeypot(
-                candidate, profile, career_history, education, exp_years,
-                stated_exp, derived_exp, skill_text
+                candidate,
+                profile,
+                career_history,
+                education,
+                exp_years,
+                stated_exp,
+                derived_exp,
+                skill_text,
             )
 
-            records.append({
-                "candidate_id": candidate_id,
-                "exp_years": exp_years,
-                "req_score": req_score,
-                "eval_score": eval_score,
-                "pref_score": pref_score,
-                "prod_score": prod_score,
-                "title_score": title_score,
-                "neg_title": neg_title,
-                "company_score": company_score,
-                "is_consulting_only": is_consulting_only,
-                "location_score": location_score,
-                "location": location,
-                "redrob_score": redrob_score,
-                "open_to_work": open_to_work,
-                "exp_fit": exp_fit,
-                "honeypot_score": honeypot_score,
-                "honeypot_flags": honeypot_flags,
-                "current_title": current_title,
-                "current_company": current_company,
-                "matched_required": matched_req,
-                "matched_eval": matched_eval,
-                "matched_preferred": matched_pref,
-            })
+            records.append(
+                {
+                    "candidate_id": candidate_id,
+                    "exp_years": exp_years,
+                    "req_score": req_score,
+                    "eval_score": eval_score,
+                    "pref_score": pref_score,
+                    "prod_score": prod_score,
+                    "title_score": title_score,
+                    "neg_title": neg_title,
+                    "company_score": company_score,
+                    "is_consulting_only": is_consulting_only,
+                    "location_score": location_score,
+                    "location": location,
+                    "redrob_score": redrob_score,
+                    "open_to_work": open_to_work,
+                    "exp_fit": exp_fit,
+                    "honeypot_score": honeypot_score,
+                    "honeypot_flags": honeypot_flags,
+                    "current_title": current_title,
+                    "current_company": current_company,
+                    "matched_required": matched_req,
+                    "matched_eval": matched_eval,
+                    "matched_preferred": matched_pref,
+                }
+            )
             texts.append(skill_text if skill_text else " ")
 
     return records, texts
@@ -664,45 +732,22 @@ def process_file(input_path):
 def add_semantic_similarity(records, texts):
     jd_vec = build_jd_vector()
     batch_size = 50000
+
+    if not texts:
+        return
+
     sims = np.zeros(len(texts), dtype=np.float32)
     for start in range(0, len(texts), batch_size):
-        chunk = texts[start:start + batch_size]
+        chunk = texts[start : start + batch_size]
         mat = _VECTORIZER.transform(chunk)
         sim = (mat @ jd_vec.T).toarray().ravel()
-        sims[start:start + len(chunk)] = sim
+        sims[start : start + len(chunk)] = sim
 
-    if sims.max() > 0:
-        sims_norm = sims / sims.max()
-    else:
-        sims_norm = sims
+    denom = float(sims.max()) if len(sims) else 0.0
+    sims_norm = sims / denom if denom > 0 else sims
 
     for rec, s in zip(records, sims_norm):
         rec["semantic_sim"] = float(s)
-
-
-def composite_score(rec):
-    score = (
-        WEIGHTS["semantic_sim"] * rec["semantic_sim"]
-        + WEIGHTS["required_skill"] * rec["req_score"]
-        + WEIGHTS["eval_skill"] * rec["eval_score"]
-        + WEIGHTS["preferred_skill"] * rec["pref_score"]
-        + WEIGHTS["production_signal"] * rec["prod_score"]
-        + WEIGHTS["experience_fit"] * rec["exp_fit"]
-        + WEIGHTS["title_score"] * rec["title_score"]
-        + WEIGHTS["company_score"] * rec["company_score"]
-        + WEIGHTS["location_score"] * rec["location_score"]
-        + WEIGHTS["redrob_score"] * rec["redrob_score"]
-    )
-
-    # Heavy penalty for clearly off-target roles unless production ML
-    # signal redeems them.
-    if rec["neg_title"] and rec["prod_score"] < 0.5 and rec["req_score"] < 0.25:
-        score *= 0.25
-
-    # Honeypot penalty
-    score *= (1 - 0.6 * rec["honeypot_score"])
-
-    return clamp(score, 0.0, 1.0)
 
 
 def main():
@@ -716,20 +761,23 @@ def main():
     records, texts = process_file(args.input)
     print(f"Loaded {len(records)} candidates in {time.time() - t0:.1f}s")
 
+    if not records:
+        with open(args.output, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["candidate_id", "rank", "score", "reasoning"])
+        print(f"No candidates to rank. Wrote 0 rows to {args.output}")
+        return
+
     add_semantic_similarity(records, texts)
     print(f"Semantic similarity computed in {time.time() - t0:.1f}s total")
 
     for rec in records:
         rec["score"] = composite_score(rec)
 
-    # Honeypot filter: drop candidates with strong honeypot signal (>=2 flags)
-    # from the eligible pool entirely, regardless of their raw score.
     eligible = [r for r in records if r["honeypot_score"] < 0.6]
     eligible.sort(key=lambda r: r["score"], reverse=True)
-
     top100 = eligible[:100]
 
-    # Ensure strictly monotonically decreasing scores for the output.
     rows = []
     prev_score = None
     for i, rec in enumerate(top100, start=1):
@@ -737,6 +785,7 @@ def main():
         if prev_score is not None and score >= prev_score:
             score = prev_score - 1e-4
         prev_score = score
+
         rec["score"] = max(score, 0.0)
         rec["rank"] = i
         rec["reasoning"] = generate_reasoning(rec)
@@ -750,12 +799,28 @@ def main():
 
     if args.debug:
         debug_fields = [
-            "candidate_id", "rank", "score", "exp_years", "semantic_sim",
-            "req_score", "eval_score", "pref_score", "prod_score",
-            "title_score", "company_score", "location_score", "redrob_score",
-            "exp_fit", "honeypot_score", "honeypot_flags",
-            "current_title", "current_company", "location",
-            "matched_required", "matched_eval", "matched_preferred",
+            "candidate_id",
+            "rank",
+            "score",
+            "exp_years",
+            "semantic_sim",
+            "req_score",
+            "eval_score",
+            "pref_score",
+            "prod_score",
+            "title_score",
+            "company_score",
+            "location_score",
+            "redrob_score",
+            "exp_fit",
+            "honeypot_score",
+            "honeypot_flags",
+            "current_title",
+            "current_company",
+            "location",
+            "matched_required",
+            "matched_eval",
+            "matched_preferred",
         ]
         with open(args.debug, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -768,3 +833,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
